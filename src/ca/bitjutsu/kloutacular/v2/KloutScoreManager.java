@@ -269,9 +269,4 @@ public class KloutScoreManager {
 			}
 		}
 	}
-	
-	/*public static void main (String[] args) {
-		KloutScoreManager instance = getInstance("b24rw6s3v9msw3f5rn7hwv4x");
-		instance.requestKlout("sudoadam", false);
-	}*/
 }

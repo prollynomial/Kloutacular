@@ -256,4 +256,52 @@ public class KloutProfile {
 	public ArrayList<String> getTopics() {
 		return mTopics;
 	}
+	
+	public String toString() {
+		StringBuilder sb = new StringBuilder();
+		sb.append("Screen name: " + mScreenName
+				+ "\nKlout score: " + mScore
+				+ "\nAmplification score: " + mAmplification
+				+ "\nNetwork score: " + mNetwork
+				+ "\nTrue reach: " + mTrueReach
+				+ "\nSlope: " + mSlope
+				+ "\nUser description: " + mUserDescription
+				+ "\nKlout class: " + mClass
+				+ "\nKlout class description: " + mClassDescription
+				+ "\nKlout class ID: " + mClassId
+				+ "\n1-day delta: " + mOneDayDelta
+				+ "\n5-day delta: " + mFiveDayDelta);
+		
+		sb.append("\nTopics: {");
+		if (mTopics == null) {
+			sb.append(" null");
+		} else {
+			for (String s : mTopics) {
+				sb.append(" " + s);
+			}
+		}
+		sb.append(" }");
+		
+		sb.append("\nInfluencers: {");
+		if (mInfluencedBy == null) {
+			sb.append(" null");
+		} else {
+			for (KloutProfile kp : mInfluencedBy) {
+				sb.append(" " + kp);
+			}
+		}
+		sb.append(" }");
+		
+		sb.append("\nInfluencer of: {");
+		if (mInfluencerOf == null) {
+			sb.append(" null");
+		} else {
+			for (KloutProfile kp : mInfluencerOf) {
+				sb.append(" " + kp);
+			}	
+		}
+		sb.append(" }");
+		
+		return sb.toString();
+	}
 }
