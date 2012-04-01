@@ -222,9 +222,16 @@ public class KloutScoreManager {
 		mApiKey = apiKey;
 	}
 	
-	private void profileUpdate(KloutProfile score) {
+	private void profileUpdate(KloutProfile kp) {
 		for (OnProfileUpdatedListener l : mUpdateListeners) {
-			l.onUpdate(score);
+			try {
+				l.onUpdate(kp);
+			} catch (NullPointerException e) {
+				// This happens sometimes, even if l is not null. ¯\(°_o)/¯
+				e.printStackTrace();
+				// TODO: we want to remove listeners that get here
+				// If we just do mUpdateListeners.remove(l), a ConcurrentModificationException occurs. That's just no good.
+			}
 		}
 	}
 	

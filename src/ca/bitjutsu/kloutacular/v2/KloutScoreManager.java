@@ -155,7 +155,6 @@ public class KloutScoreManager {
 	 * Listener interface for Klout score updates.
 	 * 
 	 * @author Adam Carruthers (adam.carruthers@bitjutsu.ca)
-	 * @since 0.1
 	 * 
 	 */
 	public interface OnScoreUpdatedListener {
