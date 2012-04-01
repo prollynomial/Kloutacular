@@ -242,6 +242,14 @@ public class KloutScoreManager {
 	public void addOnProfileUpdatedListener(OnProfileUpdatedListener l) {
 		mUpdateListeners.add(l);
 	}
+	
+	/**
+	 * Remove a listener.
+	 * @param l the listener to unregister
+	 */
+	public void removeOnProfileUpdatedListener(OnProfileUpdatedListener l) {
+		mUpdateListeners.remove(l);
+	}
 
 	private void setDebugMode(boolean debug) {
 		mIsDebugMode = debug;
