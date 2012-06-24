@@ -13,19 +13,20 @@ import org.apache.http.client.ClientProtocolException;
 import org.apache.http.client.HttpResponseException;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.impl.client.DefaultHttpClient;
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
  * 
- * KloutScoreManager fetches, stores, caches, and returns Klout scores for users.
+ * KloutProfileManager fetches, stores, caches, and returns Klout scores for users.
  * 
  * The standard usage pattern is as follows:<br><br>
  * <code>
- * KloutScoreManager mKloutMan = KloutScoreManager.getInstance(API_KEY);<br>
- * mKloutMan.addOnScoreUpdatedListener(new KloutScoreManager.OnScoreUpdatedListener() {<br>
- * &nbsp;&nbsp;public void onReceive(KloutScore k) {<br>
- * &nbsp;&nbsp;&nbsp;&nbsp;//Do stuff with the received KloutScore<br>
+ * KloutProfileManager mKloutMan = KloutProfileManager.getInstance(API_KEY);<br>
+ * mKloutMan.addOnScoreUpdatedListener(new KloutProfileManager.OnScoreUpdatedListener() {<br>
+ * &nbsp;&nbsp;public void onReceive(KloutProfile k) {<br>
+ * &nbsp;&nbsp;&nbsp;&nbsp;//Do stuff with the received KloutProfile<br>
  * &nbsp;&nbsp;}<br>
  * });<br>
  * mKloutMan.requestKlout("bitjutsu");<br>
@@ -35,42 +36,42 @@ import org.json.JSONObject;
  * 
  */
 public class KloutScoreManager {
-	// "If that was a drug deal, I would have shot Hotel Luxury Linens in the face." -- Aziz Ansari.
 	//TODO: pick a number of threads that isn't just an arbitrary choice
 	private static final int THREAD_COUNT = 10;
 	
 	private static KloutScoreManager sInstance;
 	private boolean mIsDebugMode;
 	private HashMap<String, String> mIdMapping;
-	private HashMap<String, KloutScore> mScores;
+	private HashMap<String, KloutProfile> mScores;
 	private ArrayList<OnScoreUpdatedListener> mUpdateListeners;
 	private ExecutorService mExecutor;
 	private String mApiKey;
 	
 	private KloutScoreManager(String apiKey, boolean debug) {
 		mApiKey = apiKey;
+		// TODO: print times for requests and such if debug = true
 		mIsDebugMode = debug;
 		mUpdateListeners = new ArrayList<OnScoreUpdatedListener>();
 		//TODO: retrieve mappings from disk
 		mIdMapping = new HashMap<String, String>();
-		mScores = new HashMap<String, KloutScore>();
+		mScores = new HashMap<String, KloutProfile>();
 		mExecutor = Executors.newFixedThreadPool(THREAD_COUNT);
 	}
 	
 	/**
 	 * Convenience method for {@link #getInstance(String, boolean)}.
 	 * @param apiKey the Klout API key to use
-	 * @return the global KloutScoreManager instance
+	 * @return the global KloutProfileManager instance
 	 */
 	public static KloutScoreManager getInstance(String apiKey) {
 		return getInstance(apiKey, false);
 	}
 	
 	/**
-	 * Obtain the global KloutScoreManager instance.
+	 * Obtain the global KloutProfileManager instance.
 	 * @param apiKey the Klout API key to use
 	 * @param debug specify whether we should print load times to the log
-	 * @return the global KloutScoreManager instance
+	 * @return the global KloutProfileManager instance
 	 */
 	public static KloutScoreManager getInstance(String apiKey, boolean debug) {
 		if (sInstance == null)
@@ -95,29 +96,64 @@ public class KloutScoreManager {
 	 * @param forceRequery force a refresh of the Klout score
 	 */
 	public void requestKlout(String screenName, boolean forceRequery) {
+		// TODO: check age of score and requery if necessary
 		// If we already have a cached score, and we aren't requerying, return the cached score
 		if (haveScore(screenName) && !forceRequery) {
 			scoreUpdate(mScores.get(screenName));
-		} else if (haveScore(screenName) && forceRequery) {
-			mExecutor.execute(new KloutScoreFetcher(screenName));
-		}
-		
-		// If we already have the screenName -> Klout ID pair, no need to request ID from Klout
-		if (getKloutId(screenName) != -1L) {
-			mExecutor.execute(new KloutScoreFetcher(screenName));
 		} else {
-			//Fetch the Klout ID
-			mExecutor.execute(new KloutIdFetcher(screenName));
+			mExecutor.execute(new KloutProfileFetcher(screenName));
 		}
-		
-		
+	}
+	
+	/**
+	 * Convenience method for {@link #requestInfluence(String, boolean)}.
+	 * @param screenName the Twitter handle of the user
+	 */
+	public void requestInfluence(String screenName) {
+		requestInfluence(screenName, false);
+	}
+	
+	/**
+	 * Request a user's influencers and influencees.
+	 * @param screenName the Twitter handle of the user
+	 * @param forceRequery force a refresh of the Klout score
+	 */
+	public void requestInfluence(String screenName, boolean forceRequery) {
+		// TODO: check age of influencers and requery if necessary
+		if (haveInfluence(screenName) && !forceRequery) {
+			scoreUpdate(mScores.get(screenName));
+		} else {
+			mExecutor.execute(new InfluenceFetcher(screenName));
+		}
+	}
+	
+	/**
+	 * Convenience method for {@link #requestTopics(String, boolean)}.
+	 * @param screenName the Twitter handle of the user
+	 */
+	public void requestTopics(String screenName) {
+		requestTopics(screenName, false);
+	}
+	
+	/**
+	 * Request a user's topics.
+	 * @param screenName the Twitter handle of the user
+	 * @param forceRequery force a refresh of the Klout score
+	 */
+	public void requestTopics(String screenName, boolean forceRequery) {
+		// TODO: check age of topics and requery if necessary
+		if (haveTopics(screenName) && !forceRequery) {
+			scoreUpdate(mScores.get(screenName));
+		} else {
+			mExecutor.execute(new TopicsFetcher(screenName));
+		}
 	}
 	
 	private void setApiKey(String apiKey) {
 		mApiKey = apiKey;
 	}
 	
-	private void scoreUpdate(KloutScore score) {
+	private void scoreUpdate(KloutProfile score) {
 		for (OnScoreUpdatedListener l : mUpdateListeners) {
 			l.onReceive(score);
 		}
@@ -143,7 +179,16 @@ public class KloutScoreManager {
 	 */
 	//TODO: decide whether this is public or private
 	private boolean haveScore(String screenName) {
-		return (mScores.get(screenName) != null);
+		return (mScores != null && mScores.size() != 0 && mScores.get(screenName).getScore() != -1);
+	}
+	
+	private boolean haveInfluence(String screenName) {
+		// We only have to see if either influencers or influencees exist, as they can't be fetched separately
+		return (mScores != null && mScores.size() != 0 &&  mScores.get(screenName).getInfluencers() != null);
+	}
+	
+	private boolean haveTopics(String screenName) {
+		return (mScores != null && mScores.size() != 0 &&  mScores.get(screenName).getTopics() != null);
 	}
 
 	private void setDebugMode(boolean debug) {
@@ -160,72 +205,67 @@ public class KloutScoreManager {
 	public interface OnScoreUpdatedListener {
 		/**
 		 * Passes the result of the most recently <b>returned</b> request to the Klout API.  Be sure to check that this is the Klout score
-		 * you are trying to receive, as KloutScoreManager uses multiple worker threads, and therefore can return out of request order.
-		 * @param ks the most recently retrieved KloutScore
+		 * you are trying to receive, as KloutProfileManager uses multiple worker threads, and therefore can return out of request order.
+		 * @param ks the most recently retrieved KloutProfile
 		 */
-		public void onReceive(KloutScore ks);
+		public void onReceive(KloutProfile ks);
 	}
 	
-	private class KloutIdFetcher implements Runnable {
+	// Should not ever be called on the main thread.
+	private void fetchKloutId(String screenName) {
+		//map Klout ID to Twitter name
+		try {
+			HttpGet get = new HttpGet("http://api.klout.com/v2/identity.json/twitter?screenName=" + screenName + "&key=" + mApiKey);
+			HttpResponse response = new DefaultHttpClient().execute(get);
+
+			if (response.getStatusLine().getStatusCode() != 200)
+				throw new HttpResponseException(response.getStatusLine().getStatusCode(),
+		        		"Remote server responded with code " + response.getStatusLine().getStatusCode());
+			
+			BufferedReader in = new BufferedReader(new InputStreamReader(response.getEntity().getContent()));
+			StringBuilder sb = new StringBuilder();
+			String line;
+			while ((line = in.readLine()) != null) {
+				sb.append(line);
+			}
+			
+			in.close();
+			
+			JSONObject id = new JSONObject(sb.toString());
+			
+			String kloutId = id.getString("id");
+			
+			mIdMapping.put(screenName, kloutId);
+		} catch (ClientProtocolException e) {
+			e.printStackTrace();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (JSONException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	private class KloutProfileFetcher implements Runnable {
 		private String mScreenName;
 		
-		public KloutIdFetcher(String screenName) {
+		public KloutProfileFetcher(String screenName) {
 			mScreenName = screenName;
 		}
 		
 		@Override
 		public void run() {
-			//map Klout ID to Twitter name
 			try {
-				HttpGet get = new HttpGet("http://api.klout.com/v2/identity.json/tw?screenName=" + mScreenName + "&key=" + mApiKey);
-				HttpResponse response = new DefaultHttpClient().execute(get);
-
-				if (response.getStatusLine().getStatusCode() != 200)
-					throw new HttpResponseException(response.getStatusLine().getStatusCode(),
-			        		"Remote server responded with code " + response.getStatusLine().getStatusCode());
-				
-				BufferedReader in = new BufferedReader(new InputStreamReader(response.getEntity().getContent()));
-				StringBuilder sb = new StringBuilder();
-				String line;
-				while ((line = in.readLine()) != null) {
-					sb.append(line);
+				if (getKloutId(mScreenName) == -1L) {
+					// If we don't have a Klout ID for the user, fetch it.
+					fetchKloutId(mScreenName);
 				}
 				
-				in.close();
-				
-				JSONObject id = new JSONObject(sb.toString());
-				
-				String kloutId = id.getString("id");
-				
-				mIdMapping.put(mScreenName, kloutId);
-				
-				//Notify the system that we want to fetch the Klout score for this user
-				mExecutor.execute(new KloutScoreFetcher(mScreenName));
-			} catch (ClientProtocolException e) {
-				e.printStackTrace();
-			} catch (IOException e) {
-				e.printStackTrace();
-			} catch (JSONException e) {
-				e.printStackTrace();
-			}
-		}
-	}
-	
-	private class KloutScoreFetcher implements Runnable {
-		private String mScreenName;
-		
-		public KloutScoreFetcher(String screenName) {
-			mScreenName = screenName;
-		}
-		
-		@Override
-		public void run() {
-			try {
 				String id = mIdMapping.get(mScreenName);
+				// IllegalArgumentException should never get called.
 				if (id == null)
 					throw new IllegalArgumentException("No mapping exists for \"" + mScreenName + "\"");
 				
-				HttpGet get = new HttpGet("http://api.klout.com/v2/user.json/" + id + "/score&key=" + mApiKey);
+				HttpGet get = new HttpGet("http://api.klout.com/v2/user.json/" + id + "/score?key=" + mApiKey);
 				HttpResponse response = new DefaultHttpClient().execute(get);
 
 				if (response.getStatusLine().getStatusCode() != 200)
@@ -244,19 +284,192 @@ public class KloutScoreManager {
 				JSONObject obj = new JSONObject(sb.toString());
 				
 				double score = obj.getDouble("score");
-				double amplification = obj.getDouble("amplification");
-				double trueReach = obj.getDouble("trueReach");
-				double network = obj.getDouble("network");
 				
-				KloutScore k = new KloutScore(mScreenName, score, amplification, trueReach, network);
+				JSONObject scoreDelta = obj.getJSONObject("scoreDelta");
+				double daychange = scoreDelta.getDouble("dayChange");
+				double weekchange = scoreDelta.getDouble("weekChange");
+				double monthchange = scoreDelta.getDouble("monthChange");
+				
+				KloutProfile k = new KloutProfile(mScreenName, score, daychange, weekchange, monthchange);
 				//Put the new score in the map, unless we already have a mapping and we're just updating the score
 				if (mScores.get(mScreenName) != null)
-					mScores.get(mScreenName).updateScore(score, amplification, trueReach, network);
+					mScores.get(mScreenName).updateScore(score, daychange, weekchange, monthchange);
 				else
 					mScores.put(mScreenName, k);
 				//Call all of the listeners.
 				scoreUpdate(k);
 				
+			} catch (HttpResponseException e) {
+				e.printStackTrace();
+			} catch (ClientProtocolException e) {
+				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			} catch (JSONException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	private class InfluenceFetcher implements Runnable {
+		private String mScreenName;
+		
+		public InfluenceFetcher(String screenName) {
+			mScreenName = screenName;
+		}
+		
+		@Override
+		public void run() {
+			try {
+				if (getKloutId(mScreenName) == -1L) {
+					// If we don't have a Klout ID for the user, fetch it.
+					fetchKloutId(mScreenName);
+				}
+				
+				String id = mIdMapping.get(mScreenName);
+				// IllegalArgumentException should never get called.
+				if (id == null)
+					throw new IllegalArgumentException("No mapping exists for \"" + mScreenName + "\"");
+				
+				HttpGet get = new HttpGet("http://api.klout.com/v2/user.json/" + id + "/influence?key=" + mApiKey);
+				HttpResponse response = new DefaultHttpClient().execute(get);
+
+				if (response.getStatusLine().getStatusCode() != 200)
+					throw new HttpResponseException(response.getStatusLine().getStatusCode(),
+			        		"Remote server responded with code " + response.getStatusLine().getStatusCode());
+				
+				BufferedReader in = new BufferedReader(new InputStreamReader(response.getEntity().getContent()));
+				StringBuilder sb = new StringBuilder();
+				String line;
+				while ((line = in.readLine()) != null) {
+					sb.append(line);
+				}
+				
+				in.close();
+				
+				JSONObject obj = new JSONObject(sb.toString());
+				
+				//populate influencers
+				ArrayList<KloutProfile> influencers = new ArrayList<KloutProfile>();
+				JSONArray influencersArray = obj.getJSONArray("myInfluencers");
+				
+				for (int i = 0; i < influencersArray.length(); i++) {
+					// skip over id in entity, the one in payload is identical
+					JSONObject payload = influencersArray.getJSONObject(i).getJSONObject("entity").getJSONObject("payload");
+					String kloutId = payload.getString("kloutId");
+					String screenName = payload.getString("nick");
+					double score = payload.getJSONObject("score").getDouble("score");
+					
+					//TODO: SCORE DELTAS
+					
+					// add the KloutProfiles to mScores, mIdMapping, and influencers
+					mIdMapping.put(screenName, kloutId);
+					KloutProfile temp = new KloutProfile(screenName, score);
+					mScores.put(screenName, temp);
+					influencers.add(temp);
+				}
+				
+				//populate influencees
+				ArrayList<KloutProfile> influencees = new ArrayList<KloutProfile>();
+				JSONArray influenceesArray = obj.getJSONArray("myInfluencees");
+				
+				for (int i = 0; i < influenceesArray.length(); i++) {
+					// skip over id in entity, the one in payload is identical
+					JSONObject payload = influenceesArray.getJSONObject(i).getJSONObject("entity").getJSONObject("payload");
+					String kloutId = payload.getString("kloutId");
+					String screenName = payload.getString("nick");
+					double score = payload.getJSONObject("score").getDouble("score");
+					
+					//TODO: SCORE DELTAS
+					
+					// add the KloutProfiles to mScores, mIdMapping, and influencers
+					mIdMapping.put(screenName, kloutId);
+					KloutProfile temp = new KloutProfile(screenName, score);
+					mScores.put(screenName, temp);
+					influencees.add(temp);
+				}
+				
+				KloutProfile k = new KloutProfile(mScreenName, influencers, influencees);
+				//Put the new score in the map, unless we already have a mapping and we're just updating the score
+				if (mScores.get(mScreenName) != null)
+					mScores.get(mScreenName).updateScore(influencers, influencees);
+				else
+					mScores.put(mScreenName, k);
+				//Call all of the listeners.
+				scoreUpdate(k);
+				
+			} catch (HttpResponseException e) {
+				e.printStackTrace();
+			} catch (ClientProtocolException e) {
+				e.printStackTrace();
+			} catch (IOException e) {
+				e.printStackTrace();
+			} catch (JSONException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	private class TopicsFetcher implements Runnable {
+		private String mScreenName;
+		
+		public TopicsFetcher(String screenName) {
+			mScreenName = screenName;
+		}
+		
+		@Override
+		public void run() {
+			try {
+				if (getKloutId(mScreenName) == -1L) {
+					// If we don't have a Klout ID for the user, fetch it.
+					fetchKloutId(mScreenName);
+				}
+				
+				String id = mIdMapping.get(mScreenName);
+				// IllegalArgumentException should never get called.
+				if (id == null)
+					throw new IllegalArgumentException("No mapping exists for \"" + mScreenName + "\"");
+				
+				HttpGet get = new HttpGet("http://api.klout.com/v2/user.json/" + id + "/topics?key=" + mApiKey);
+				HttpResponse response = new DefaultHttpClient().execute(get);
+
+				if (response.getStatusLine().getStatusCode() != 200)
+					throw new HttpResponseException(response.getStatusLine().getStatusCode(),
+			        		"Remote server responded with code " + response.getStatusLine().getStatusCode());
+				
+				BufferedReader in = new BufferedReader(new InputStreamReader(response.getEntity().getContent()));
+				StringBuilder sb = new StringBuilder();
+				String line;
+				while ((line = in.readLine()) != null) {
+					sb.append(line);
+				}
+				
+				in.close();
+				
+				JSONArray arr = new JSONArray(sb.toString());
+				
+				ArrayList<Topic> topics = new ArrayList<Topic>();
+				
+				for (int i = 0; i < arr.length(); i++) {
+					JSONObject obj = arr.getJSONObject(i);
+					
+					long topicId = obj.getLong("id");
+					String name = obj.getString("name");
+					String displayName = obj.getString("displayName");
+					String slug = obj.getString("slug");
+					String imageUrl = obj.getString("imageUrl");
+					
+					topics.add(new Topic(topicId, name, displayName, slug, imageUrl));
+				}
+				
+				KloutProfile k = new KloutProfile(mScreenName, topics);
+				//Put the new score in the map, unless we already have a mapping and we're just updating the score
+				if (mScores.get(mScreenName) != null)
+					mScores.get(mScreenName).updateScore(topics);
+				else
+					mScores.put(mScreenName, k);
+				//Call all of the listeners.
+				scoreUpdate(k);
 			} catch (HttpResponseException e) {
 				e.printStackTrace();
 			} catch (ClientProtocolException e) {
