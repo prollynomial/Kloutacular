@@ -76,27 +76,23 @@ public class KloutProfile {
 		return mTopics;
 	}
 	
-	// TODO: public or package?
-	public void updateScore(double score, double daychange, double weekchange, double monthchange) {
+	/* package */ void updateScore(double score, double daychange, double weekchange, double monthchange) {
 		mScore = score;
 		mDayChange = daychange;
 		mWeekChange = weekchange;
 		mMonthChange = monthchange;
 	}
 	
-	// TODO: public or package?
-	public void updateScore(double score) {
+	/* package */ void updateScore(double score) {
 		mScore = score;
 	}
 	
-	// TODO: public or package?
-	public void updateScore(ArrayList<KloutProfile> influencers, ArrayList<KloutProfile> influencees) {
+	/* package */ void updateScore(ArrayList<KloutProfile> influencers, ArrayList<KloutProfile> influencees) {
 		mInfluencedBy = influencers;
 		mInfluencerOf = influencees;
 	}
 	
-	// TODO: public or package?
-	public void updateScore(ArrayList<Topic> topics) {
+	/* package */ void updateScore(ArrayList<Topic> topics) {
 		mTopics = topics;
 	}
 }
